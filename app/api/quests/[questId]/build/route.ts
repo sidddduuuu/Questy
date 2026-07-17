@@ -1,4 +1,5 @@
 import { QuestBuildRequestSchema } from "@/lib/quest";
+import { getQuest, markQuestReady } from "@/lib/quest-store";
 import { publishQuestPage } from "@/lib/zero";
 
 type RouteContext = { params: Promise<{ questId: string }> };
@@ -23,7 +24,19 @@ export async function POST(request: Request, { params }: RouteContext) {
   }
 
   try {
-    return Response.json({ success: true, asset: await publishQuestPage(quest.data) });
+    const storedQuest = getQuest(quest.data.id);
+    if (!storedQuest) {
+      return Response.json(
+        { success: false, error: "Generate the quest before building it" },
+        { status: 404 },
+      );
+    }
+
+    const asset = await publishQuestPage(
+      QuestBuildRequestSchema.parse(storedQuest),
+    );
+    markQuestReady(storedQuest.id, asset);
+    return Response.json({ success: true, asset });
   } catch {
     return Response.json(
       { success: false, error: "Zero could not publish the quest page" },

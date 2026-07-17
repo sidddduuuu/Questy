@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { GenerateQuestRequestSchema, QuestSchema } from "@/lib/quest";
+import { saveQuest } from "@/lib/quest-store";
 import { getCustomerContext } from "@/lib/nexla";
 import { planQuest } from "@/lib/zero";
 
@@ -38,15 +39,17 @@ export async function POST(request: Request) {
     }
 
     const { plan, execution } = await planQuest(context);
-    const quest = QuestSchema.parse({
-      id: `quest-${context.id}-${randomUUID().slice(0, 8)}`,
-      customerId: context.id,
-      businessGoal: context.businessGoal,
-      ...plan,
-      assets: [],
-      status: "draft",
-      createdAt: new Date().toISOString(),
-    });
+    const quest = saveQuest(
+      QuestSchema.parse({
+        id: `quest-${context.id}-${randomUUID().slice(0, 8)}`,
+        customerId: context.id,
+        businessGoal: context.businessGoal,
+        ...plan,
+        assets: [],
+        status: "draft",
+        createdAt: new Date().toISOString(),
+      }),
+    );
 
     return Response.json({
       success: true,
