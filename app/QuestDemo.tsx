@@ -35,6 +35,14 @@ type AppState =
 type Screen = "dashboard" | "compare" | "quest" | "promotion";
 type PersonaLabels = Record<CustomerContext["persona"], string>;
 type ContextSource = "nexla" | "nexla-cache";
+type CustomerRun = {
+  quest: Quest;
+  planner: QuestPlannerExecution;
+  asset: ZeroQuestAsset;
+  completion: QuestCompletion | null;
+  source: ContextSource;
+  durationMs: number;
+};
 
 async function responseJson(response: Response): Promise<unknown> {
   const body: unknown = await response.json().catch(() => null);
@@ -171,7 +179,7 @@ function Trace({ progress, phase, source }: { progress: number; phase: AppState;
   );
 }
 
-function IntegrationProof({ planner, asset }: { planner: QuestPlannerExecution | null; asset: ZeroQuestAsset | null }) {
+function IntegrationProof({ planner, asset, durationMs }: { planner: QuestPlannerExecution | null; asset: ZeroQuestAsset | null; durationMs: number | null }) {
   if (!planner && !asset) return null;
   return (
     <div className="integration-proof">
@@ -190,9 +198,9 @@ function IntegrationProof({ planner, asset }: { planner: QuestPlannerExecution |
         </div>
       )}
       <div>
-        <span>Recorded cost</span>
-        <strong>{asset?.cost === undefined ? "Included" : `$${asset.cost.toFixed(3)}`}</strong>
-        <small>Zero execution</small>
+        <span>Live execution</span>
+        <strong>{durationMs === null ? "In progress" : `${(durationMs / 1_000).toFixed(1)} seconds`}</strong>
+        <small>{asset?.cost === undefined ? "Cost recorded by Zero" : `$${asset.cost.toFixed(3)} recorded cost`}</small>
       </div>
     </div>
   );
@@ -227,6 +235,7 @@ function QuestCard({
       <div className="capability-list" aria-label="Agent-selected capabilities">
         {quest.requiredCapabilities.map((capability) => <span key={capability}>{capability}</span>)}
       </div>
+      <p className="trust-line"><i className="ti ti-shield-lock" aria-hidden="true" /> Completion and XP awards are protected by Pomerium.</p>
       <div className="quest-actions">
         {asset?.url && (
           <a className="button secondary-button" href={asset.url} rel="noreferrer" target="_blank">
@@ -275,6 +284,7 @@ function Dashboard({
   completion,
   completing,
   error,
+  durationMs,
   onCreate,
   onComplete,
 }: {
@@ -288,6 +298,7 @@ function Dashboard({
   completion: QuestCompletion | null;
   completing: boolean;
   error: string | null;
+  durationMs: number | null;
   onCreate: () => void;
   onComplete: () => void;
 }) {
@@ -322,35 +333,61 @@ function Dashboard({
       </div>
 
       {error && <p className="message error-message" role="alert"><i className="ti ti-alert-circle" aria-hidden="true" /> {error}</p>}
-      {planner?.status === "fallback" && <p className="message recovery-message">Zero planning recovered with a reviewed local strategy.</p>}
+      {planner?.status === "fallback" && <p className="message recovery-message">Zero planning recovered with a validated local strategy.</p>}
       {asset?.status === "fallback" && <p className="message recovery-message">Zero hosting recovered to the built-in quest page.</p>}
       {quest && <QuestCard asset={asset} completion={completion} completing={completing} onComplete={onComplete} quest={quest} />}
-      <IntegrationProof asset={asset} planner={planner} />
+      <IntegrationProof asset={asset} durationMs={durationMs} planner={planner} />
     </div>
   );
 }
 
-function CompareScreen({ customers, selected, personaLabels }: { customers: CustomerContext[]; selected: CustomerContext; personaLabels: PersonaLabels }) {
+function CompareScreen({
+  customers,
+  selected,
+  personaLabels,
+  runs,
+  busy,
+  onGenerate,
+}: {
+  customers: CustomerContext[];
+  selected: CustomerContext;
+  personaLabels: PersonaLabels;
+  runs: Partial<Record<CustomerId, CustomerRun>>;
+  busy: boolean;
+  onGenerate: (id: CustomerId) => void;
+}) {
+  const generatedCount = Object.keys(runs).length;
   return (
     <section className="content-screen">
-      <span className="eyebrow">Same business goal, different people</span>
-      <h1>Why personalization changes the quest</h1>
-      <p className="screen-intro">These are the live normalized customer records QuestLoop uses. No audience segments or sample results are invented here.</p>
+      <span className="eyebrow">Pitch proof · {generatedCount} of {customers.length} quests live</span>
+      <h1>Same goal. Different quest mechanics.</h1>
+      <p className="screen-intro">Every result below is generated from the customer’s real normalized context and published through the live build flow.</p>
       <div className="compare-grid">
-        {customers.map((customer) => (
-          <article className="compare-card" data-selected={customer.id === selected.id} key={customer.id}>
-            <CustomerAvatar customer={customer} />
-            <span className="persona-label">{personaLabels[customer.persona]}</span>
-            <h2>{customer.name}</h2>
-            <dl>
-              <div><dt>Visits</dt><dd>{customer.visitPattern}</dd></div>
-              <div><dt>Shares</dt><dd>{customer.sharingStyle}</dd></div>
-              <div><dt>Group</dt><dd>{customer.commonGroup}</dd></div>
-              <div><dt>Favorite</dt><dd>{customer.favoriteProduct}</dd></div>
-            </dl>
-            <span className="tier-line">{customer.currentTier} · {customer.currentXp.toLocaleString()} XP</span>
-          </article>
-        ))}
+        {customers.map((customer) => {
+          const run = runs[customer.id];
+          return (
+            <article className="compare-card" data-selected={customer.id === selected.id} key={customer.id}>
+              <CustomerAvatar customer={customer} />
+              <span className="persona-label">{personaLabels[customer.persona]}</span>
+              <h2>{customer.name}</h2>
+              <p className="compare-context">{customer.sharingStyle} sharing · {customer.commonGroup}</p>
+              {run ? (
+                <div className="compare-quest">
+                  <span className="quest-status"><span aria-hidden="true" /> {run.asset.status === "created" ? "Zero live" : "Recovery live"}</span>
+                  <h3>{run.quest.title}</h3>
+                  <p>{run.quest.description}</p>
+                  <div className="reward-row"><span>+{run.quest.xpReward} XP</span><span>{run.quest.businessReward}</span></div>
+                  {run.asset.url && <a className="compare-link" href={run.asset.url} rel="noreferrer" target="_blank">Open quest <i className="ti ti-arrow-up-right" aria-hidden="true" /></a>}
+                </div>
+              ) : (
+                <div className="compare-empty">
+                  <p>Generate this customer’s quest to add real evidence to the comparison.</p>
+                  <button className="button secondary-button" disabled={busy} onClick={() => onGenerate(customer.id)} type="button">Generate {customer.name}’s quest</button>
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -432,6 +469,8 @@ export default function QuestDemo({
   const [completing, setCompleting] = useState(false);
   const [contextSource, setContextSource] = useState(initialContextSource);
   const [error, setError] = useState<string | null>(null);
+  const [durationMs, setDurationMs] = useState<number | null>(null);
+  const [runs, setRuns] = useState<Partial<Record<CustomerId, CustomerRun>>>({});
   const selected = customers.find(({ id }) => id === selectedId) ?? customers[0];
   const busy = phase === "quest_planning" || phase === "zero_searching";
 
@@ -445,15 +484,32 @@ export default function QuestDemo({
     setCompletion(null);
     setCompleting(false);
     setError(null);
+    setDurationMs(null);
   }
 
   function selectCustomer(customerId: CustomerId) {
-    resetForCustomer(customerId);
+    const run = runs[customerId];
+    if (!run) {
+      resetForCustomer(customerId);
+    } else {
+      setSelectedId(customerId);
+      setPhase(run.completion ? (run.completion.promoted ? "promoted" : "quest_completed") : "quest_ready");
+      setTraceProgress(traceSteps.length);
+      setQuest(run.quest);
+      setPlanner(run.planner);
+      setAsset(run.asset);
+      setCompletion(run.completion);
+      setContextSource(run.source);
+      setDurationMs(run.durationMs);
+      setCompleting(false);
+      setError(null);
+    }
     setScreen("dashboard");
   }
 
   async function createQuest(customerId: CustomerId = selected.id) {
     const customer = customers.find(({ id }) => id === customerId) ?? selected;
+    const startedAt = performance.now();
     resetForCustomer(customer.id);
     setScreen("dashboard");
     setPhase("quest_planning");
@@ -475,8 +531,22 @@ export default function QuestDemo({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(generated.quest),
       })));
+      const readyQuest: Quest = { ...generated.quest, assets: [...generated.quest.assets, built.asset], status: "ready" };
+      const elapsed = performance.now() - startedAt;
       setAsset(built.asset);
-      setQuest({ ...generated.quest, assets: [...generated.quest.assets, built.asset], status: "ready" });
+      setQuest(readyQuest);
+      setDurationMs(elapsed);
+      setRuns((current) => ({
+        ...current,
+        [customer.id]: {
+          quest: readyQuest,
+          planner: generated.planner,
+          asset: built.asset,
+          completion: null,
+          source: generated.source,
+          durationMs: elapsed,
+        },
+      }));
       setTraceProgress(traceSteps.length);
       setPhase("quest_ready");
     } catch (caught) {
@@ -491,8 +561,13 @@ export default function QuestDemo({
     setCompleting(true);
     try {
       const result = CompleteQuestResponseSchema.parse(await responseJson(await fetch(`/api/quests/${quest.id}/complete`, { method: "POST" })));
+      const completedQuest: Quest = { ...quest, status: "completed", completedAt: new Date().toISOString() };
       setCompletion(result);
-      setQuest({ ...quest, status: "completed", completedAt: new Date().toISOString() });
+      setQuest(completedQuest);
+      setRuns((current) => {
+        const run = current[quest.customerId];
+        return run ? { ...current, [quest.customerId]: { ...run, quest: completedQuest, completion: result } } : current;
+      });
       setPhase(result.promoted ? "promoted" : "quest_completed");
       setScreen("promotion");
     } catch (caught) {
@@ -508,8 +583,8 @@ export default function QuestDemo({
       <TopNav onChange={setScreen} screen={screen} />
       <Sidebar busy={busy} customers={customers} onRunDemo={() => void createQuest("omar")} onSelect={selectCustomer} personaLabels={personaLabels} selected={selected} />
       <main className="main-content">
-        {screen === "dashboard" && <Dashboard asset={asset} completing={completing} completion={completion} customer={selected} error={error} onComplete={() => void completeQuest()} onCreate={() => void createQuest()} phase={phase} planner={planner} quest={quest} source={contextSource} traceProgress={traceProgress} />}
-        {screen === "compare" && <CompareScreen customers={customers} personaLabels={personaLabels} selected={selected} />}
+        {screen === "dashboard" && <Dashboard asset={asset} completing={completing} completion={completion} customer={selected} durationMs={durationMs} error={error} onComplete={() => void completeQuest()} onCreate={() => void createQuest()} phase={phase} planner={planner} quest={quest} source={contextSource} traceProgress={traceProgress} />}
+        {screen === "compare" && <CompareScreen busy={busy} customers={customers} onGenerate={(id) => void createQuest(id)} personaLabels={personaLabels} runs={runs} selected={selected} />}
         {screen === "quest" && <QuestScreen asset={asset} customer={selected} quest={quest} />}
         {screen === "promotion" && <PromotionScreen completion={completion} customer={selected} />}
       </main>
