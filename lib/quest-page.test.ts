@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderQuestPage } from "./quest-page.ts";
-import { QuestBuildRequestSchema, type QuestBuildRequest } from "./quest.ts";
+import {
+  QuestBuildRequestSchema,
+  QuestPlanSchema,
+  type QuestBuildRequest,
+} from "./quest.ts";
 
 const quest: QuestBuildRequest = {
   id: "omar-lunch-001",
@@ -27,4 +31,20 @@ test("escapes quest content before publishing HTML", () => {
 
   assert.equal(html.includes("<script>alert(1)</script>"), false);
   assert.equal(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true);
+});
+
+test("rejects quest plans that exceed prompt word limits", () => {
+  const plan = {
+    ...quest,
+    rationale: "Matches Omar's private coworker sharing style.",
+  };
+
+  assert.equal(QuestPlanSchema.safeParse(plan).success, true);
+  assert.equal(
+    QuestPlanSchema.safeParse({
+      ...plan,
+      title: "one two three four five six seven eight nine ten",
+    }).success,
+    false,
+  );
 });
