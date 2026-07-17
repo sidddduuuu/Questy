@@ -1,8 +1,12 @@
 import type { Quest, ZeroQuestAsset } from "./quest.ts";
 
-// ponytail: process-local storage is enough for the single-instance demo; use
-// shared persistence when the app runs on multiple instances.
-const quests = new Map<string, Quest>();
+// ponytail: a global process-local store keeps separate Next.js route bundles
+// in sync for this single-instance demo. Use shared persistence when scaling.
+const processStore = globalThis as typeof globalThis & {
+  questLoopQuests?: Map<string, Quest>;
+};
+const quests = processStore.questLoopQuests ?? new Map<string, Quest>();
+processStore.questLoopQuests = quests;
 
 export function saveQuest(quest: Quest): Quest {
   quests.set(quest.id, quest);

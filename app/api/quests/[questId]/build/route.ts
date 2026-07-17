@@ -5,6 +5,16 @@ import { publishQuestPage } from "@/lib/zero";
 
 type RouteContext = { params: Promise<{ questId: string }> };
 
+function publicRequestUrl(requestUrl: string): string {
+  const issuer = process.env.POMERIUM_ISSUER;
+  if (!issuer) return requestUrl;
+
+  const origin = issuer.startsWith("http://") || issuer.startsWith("https://")
+    ? issuer
+    : `https://${issuer}`;
+  return new URL(new URL(requestUrl).pathname, origin).toString();
+}
+
 export async function POST(request: Request, { params }: RouteContext) {
   let body: unknown;
   try {
@@ -39,7 +49,10 @@ export async function POST(request: Request, { params }: RouteContext) {
     markQuestReady(storedQuest.id, asset);
     return Response.json({ success: true, asset });
   } catch {
-    const asset = createLocalQuestAsset(quest.data.id, request.url);
+    const asset = createLocalQuestAsset(
+      quest.data.id,
+      publicRequestUrl(request.url),
+    );
     markQuestReady(quest.data.id, asset);
     return Response.json({ success: true, asset });
   }
