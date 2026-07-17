@@ -35,8 +35,15 @@ export function canCompleteQuest(
   identity: PomeriumIdentity,
   customerId: CustomerId,
   adminGroup = process.env.POMERIUM_ADMIN_GROUP ?? "questloop-admin",
+  adminEmails = (process.env.POMERIUM_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
 ): boolean {
   return (
-    identity.customer_id === customerId || identity.groups.includes(adminGroup)
+    identity.customer_id === customerId ||
+    identity.groups.includes(adminGroup) ||
+    (identity.email !== undefined &&
+      adminEmails.includes(identity.email.toLowerCase()))
   );
 }

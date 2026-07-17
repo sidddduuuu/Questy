@@ -26,6 +26,15 @@ test("authorizes only the matching customer or a QuestLoop admin", () => {
     canCompleteQuest({ sub: "admin-1", groups: ["questloop-admin"] }, "maya"),
     true,
   );
+  assert.equal(
+    canCompleteQuest(
+      { sub: "admin-2", email: "OWNER@example.com", groups: [] },
+      "maya",
+      "questloop-admin",
+      ["owner@example.com"],
+    ),
+    true,
+  );
 });
 
 test("rejects requests that did not pass through Pomerium", async () => {
