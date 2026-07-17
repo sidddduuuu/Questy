@@ -52,10 +52,51 @@ export const QuestSchema = QuestPlanSchema.extend({
   completedAt: z.iso.datetime().optional(),
 });
 
+export const QuestPlannerExecutionSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  runId: z.string().min(1),
+  cost: z.number().nonnegative(),
+  reviewed: z.boolean(),
+  capabilityToken: z.string().min(1),
+});
+
+export const GenerateQuestResponseSchema = z.object({
+  success: z.literal(true),
+  source: z.literal("nexla"),
+  quest: QuestSchema,
+  planner: QuestPlannerExecutionSchema,
+});
+
+export const BuildQuestResponseSchema = z.object({
+  success: z.literal(true),
+  asset: ZeroQuestAssetSchema,
+});
+
+export const CompleteQuestResponseSchema = z.object({
+  success: z.literal(true),
+  identity: z.object({
+    provider: z.literal("pomerium"),
+    subject: z.string().min(1),
+  }),
+  xpAwarded: z.number().int().positive(),
+  totalXp: z.number().int().nonnegative(),
+  oldTier: z.enum(["Explorer", "Connector", "Organizer", "Ambassador"]),
+  newTier: z.enum(["Explorer", "Connector", "Organizer", "Ambassador"]),
+  promoted: z.boolean(),
+});
+
+export const ApiErrorSchema = z.object({
+  success: z.literal(false),
+  error: z.string().min(1),
+});
+
 export type QuestPlan = z.infer<typeof QuestPlanSchema>;
 export type QuestBuildRequest = z.infer<typeof QuestBuildRequestSchema>;
 export type Quest = z.infer<typeof QuestSchema>;
 export type ZeroQuestAsset = z.infer<typeof ZeroQuestAssetSchema>;
+export type QuestPlannerExecution = z.infer<typeof QuestPlannerExecutionSchema>;
+export type QuestCompletion = z.infer<typeof CompleteQuestResponseSchema>;
 
 export function tierForXp(xp: number): Quest["tier"] {
   if (xp >= 2_000) return "Ambassador";

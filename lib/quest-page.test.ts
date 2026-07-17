@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderQuestPage } from "./quest-page.ts";
+import { createLocalQuestAsset, renderQuestPage } from "./quest-page.ts";
 import {
   QuestBuildRequestSchema,
   QuestPlanSchema,
@@ -47,4 +47,14 @@ test("rejects quest plans that exceed prompt word limits", () => {
     }).success,
     false,
   );
+});
+
+test("creates a usable local asset when Zero hosting fails", () => {
+  const asset = createLocalQuestAsset(
+    quest.id,
+    `https://questloop.test/api/quests/${quest.id}/build`,
+  );
+
+  assert.equal(asset.status, "fallback");
+  assert.equal(asset.url, `https://questloop.test/quest/${quest.id}`);
 });

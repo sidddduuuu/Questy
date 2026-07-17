@@ -1,4 +1,5 @@
 import { QuestBuildRequestSchema } from "@/lib/quest";
+import { createLocalQuestAsset } from "@/lib/quest-page";
 import { getQuest, markQuestReady } from "@/lib/quest-store";
 import { publishQuestPage } from "@/lib/zero";
 
@@ -38,9 +39,8 @@ export async function POST(request: Request, { params }: RouteContext) {
     markQuestReady(storedQuest.id, asset);
     return Response.json({ success: true, asset });
   } catch {
-    return Response.json(
-      { success: false, error: "Zero could not publish the quest page" },
-      { status: 502 },
-    );
+    const asset = createLocalQuestAsset(quest.data.id, request.url);
+    markQuestReady(quest.data.id, asset);
+    return Response.json({ success: true, asset });
   }
 }
