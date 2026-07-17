@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createLocalQuestAsset, renderQuestPage } from "./quest-page.ts";
 import {
+  fallbackQuestPlan,
   QuestBuildRequestSchema,
   QuestPlanSchema,
   type QuestBuildRequest,
@@ -57,4 +58,22 @@ test("creates a usable local asset when Zero hosting fails", () => {
 
   assert.equal(asset.status, "fallback");
   assert.equal(asset.url, `https://questloop.test/quest/${quest.id}`);
+});
+
+test("recovers with a persona-specific quest plan", () => {
+  const plan = fallbackQuestPlan({
+    id: "omar",
+    name: "Omar",
+    persona: "office_connector",
+    visitPattern: "weekday lunch",
+    sharingStyle: "private",
+    commonGroup: "coworkers",
+    favoriteProduct: "lunch combinations",
+    currentXp: 780,
+    currentTier: "Connector",
+    businessGoal: "Fill quiet Tuesday afternoons with new customers",
+  });
+
+  assert.equal(plan.title, "Bring two coworkers Tuesday");
+  assert.equal(plan.requiredCapabilities.includes("private invitation page"), true);
 });

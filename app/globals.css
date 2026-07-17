@@ -151,6 +151,11 @@ h2 {
   background: currentColor;
 }
 
+.connection[data-source="nexla-cache"] {
+  color: #654712;
+  background: #f7eacb;
+}
+
 .run-chip {
   max-width: 155px;
   overflow: hidden;

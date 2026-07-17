@@ -66,6 +66,7 @@ const PlannerResponseSchema = z.object({
 export type QuestPlanResult = {
   plan: QuestPlan;
   execution: {
+    status: "created" | "fallback";
     provider: string;
     model: string;
     runId: string;
@@ -193,6 +194,7 @@ export async function planQuest(
     return {
       plan,
       execution: {
+        status: "created",
         provider: selected.canonicalName,
         model: response.model,
         runId: result.runId,

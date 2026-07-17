@@ -11,7 +11,7 @@ function errorResponse(error: string, status: number) {
 
 async function awardQuest(quest: Quest, subject: string) {
   try {
-    const customer = await getCustomerContext(quest.customerId);
+    const { context: customer } = await getCustomerContext(quest.customerId);
     if (!customer) return errorResponse("Customer context not found", 404);
 
     const totalXp = customer.currentXp + quest.xpReward;

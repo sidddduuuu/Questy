@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import cachedCustomerData from "@/data/nexla-context-cache.json";
 import {
   CustomerContextSchema,
   type CustomerContext,
@@ -21,7 +22,10 @@ const NexlaMapListSchema = z.array(
   z.object({ id: z.number().int().positive(), name: z.string() }),
 );
 
+const CachedCustomersSchema = z.array(CustomerContextSchema).length(3);
+
 type NexlaConfig = { baseUrl: string; accessToken: string };
+export type NexlaSource = "nexla" | "nexla-cache";
 
 async function getNexlaConfig(): Promise<NexlaConfig> {
   if (process.env.NEXLA_API_URL && process.env.NEXLA_ACCESS_TOKEN) {
@@ -91,18 +95,45 @@ async function getCustomerFromMap(
   return entries.find(({ id }) => id === customerId) ?? null;
 }
 
-export async function getCustomerContext(
-  customerId: CustomerId,
-): Promise<CustomerContext | null> {
-  return getCustomerFromMap(await getCustomerMapId(), customerId);
+function getCachedCustomers(): CustomerContext[] {
+  return CachedCustomersSchema.parse(cachedCustomerData);
 }
 
-export async function getAllCustomerContexts(): Promise<CustomerContext[]> {
-  const mapId = await getCustomerMapId();
-  const customerIds = ["maya", "omar", "lena"] as const;
-  const customers = await Promise.all(
-    customerIds.map((customerId) => getCustomerFromMap(mapId, customerId)),
-  );
+export async function getCustomerContext(
+  customerId: CustomerId,
+): Promise<{ context: CustomerContext | null; source: NexlaSource }> {
+  try {
+    const context = await getCustomerFromMap(await getCustomerMapId(), customerId);
+    if (context) return { context, source: "nexla" };
+  } catch {
+    // The validated Nexla snapshot below keeps the demo usable during outages.
+  }
 
-  return customers.filter((customer): customer is CustomerContext => customer !== null);
+  return {
+    context: getCachedCustomers().find(({ id }) => id === customerId) ?? null,
+    source: "nexla-cache",
+  };
+}
+
+export async function getAllCustomerContexts(): Promise<{
+  customers: CustomerContext[];
+  source: NexlaSource;
+}> {
+  try {
+    const mapId = await getCustomerMapId();
+    const customerIds = ["maya", "omar", "lena"] as const;
+    const customers = await Promise.all(
+      customerIds.map((customerId) => getCustomerFromMap(mapId, customerId)),
+    );
+    const complete = customers.filter(
+      (customer): customer is CustomerContext => customer !== null,
+    );
+    if (complete.length === customerIds.length) {
+      return { customers: complete, source: "nexla" };
+    }
+  } catch {
+    // Fall through to the last validated Nexla output.
+  }
+
+  return { customers: getCachedCustomers(), source: "nexla-cache" };
 }

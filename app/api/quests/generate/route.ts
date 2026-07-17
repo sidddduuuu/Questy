@@ -1,8 +1,38 @@
 import { randomUUID } from "node:crypto";
-import { GenerateQuestRequestSchema, QuestSchema } from "@/lib/quest";
+import {
+  fallbackQuestPlan,
+  GenerateQuestRequestSchema,
+  QuestSchema,
+} from "@/lib/quest";
 import { saveQuest } from "@/lib/quest-store";
+import type { CustomerContext } from "@/lib/customer";
 import { getCustomerContext } from "@/lib/nexla";
-import { planQuest } from "@/lib/zero";
+import { planQuest, type QuestPlanResult } from "@/lib/zero";
+
+async function planQuestWithRecovery(
+  customer: CustomerContext,
+): Promise<QuestPlanResult> {
+  try {
+    return await planQuest(customer);
+  } catch {
+    try {
+      return await planQuest(customer);
+    } catch {
+      return {
+        plan: fallbackQuestPlan(customer),
+        execution: {
+          status: "fallback",
+          provider: "QuestLoop deterministic recovery",
+          model: "persona rules",
+          runId: `fallback-${customer.id}`,
+          cost: 0,
+          reviewed: false,
+          capabilityToken: "local-recovery",
+        },
+      };
+    }
+  }
+}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -24,7 +54,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const context = await getCustomerContext(input.data.customerId);
+    const { context, source } = await getCustomerContext(input.data.customerId);
     if (!context) {
       return Response.json(
         { success: false, error: "Customer context not found" },
@@ -38,7 +68,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { plan, execution } = await planQuest(context);
+    const { plan, execution } = await planQuestWithRecovery(context);
     const quest = saveQuest(
       QuestSchema.parse({
         id: `quest-${context.id}-${randomUUID().slice(0, 8)}`,
@@ -53,7 +83,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       success: true,
-      source: "nexla",
+      source,
       quest,
       planner: execution,
     });

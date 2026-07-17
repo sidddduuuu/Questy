@@ -35,6 +35,7 @@ type AppState =
   | "error";
 
 type PersonaLabels = Record<CustomerContext["persona"], string>;
+type ContextSource = "nexla" | "nexla-cache";
 
 async function responseJson(response: Response): Promise<unknown> {
   const body: unknown = await response.json().catch(() => null);
@@ -47,9 +48,11 @@ async function responseJson(response: Response): Promise<unknown> {
 
 export default function QuestDemo({
   customers,
+  initialContextSource,
   personaLabels,
 }: {
   customers: CustomerContext[];
+  initialContextSource: ContextSource;
   personaLabels: PersonaLabels;
 }) {
   const [selectedId, setSelectedId] = useState<CustomerId>(customers[0].id);
@@ -60,6 +63,7 @@ export default function QuestDemo({
   const [asset, setAsset] = useState<ZeroQuestAsset | null>(null);
   const [completion, setCompletion] = useState<QuestCompletion | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [contextSource, setContextSource] = useState(initialContextSource);
   const [error, setError] = useState<string | null>(null);
   const selected = customers.find(({ id }) => id === selectedId) ?? customers[0];
   const busy = phase === "quest_planning" || phase === "zero_searching";
@@ -97,6 +101,7 @@ export default function QuestDemo({
       );
       setQuest(generated.quest);
       setPlanner(generated.planner);
+      setContextSource(generated.source);
       setPhase("zero_searching");
       setTraceProgress(3);
 
@@ -164,7 +169,7 @@ export default function QuestDemo({
               <span className="step-label">1 · Customer</span>
               <h2 id="customers-heading">Choose a customer</h2>
             </div>
-            <span className="connection"><i aria-hidden="true" /> Nexla live</span>
+            <span className="connection" data-source={contextSource}><i aria-hidden="true" /> {contextSource === "nexla" ? "Nexla live" : "Nexla cached"}</span>
           </div>
 
           <div className="customer-list">
@@ -185,7 +190,7 @@ export default function QuestDemo({
           </div>
 
           <section className="context" aria-label={`${selected.name} Nexla context`}>
-            <div className="context-title"><strong>Nexla customer context</strong><span>Normalized</span></div>
+            <div className="context-title"><strong>Nexla customer context</strong><span>{contextSource === "nexla" ? "Normalized" : "Cached recovery"}</span></div>
             <dl>
               <div><dt>Visit pattern</dt><dd>{selected.visitPattern}</dd></div>
               <div><dt>Sharing style</dt><dd>{selected.sharingStyle}</dd></div>
@@ -202,7 +207,7 @@ export default function QuestDemo({
               <span className="step-label">2 · Personalized quest</span>
               <h2 id="quest-heading">{quest ? quest.title : `Build ${selected.name}’s next quest`}</h2>
             </div>
-            {planner && <span className="run-chip">Zero run {planner.runId.slice(0, 8)}</span>}
+            {planner && <span className="run-chip">{planner.status === "created" ? `Zero run ${planner.runId.slice(0, 8)}` : "Planner recovery"}</span>}
           </div>
 
           <ol className="trace" aria-label="Quest creation trace" aria-live="polite">
@@ -214,11 +219,19 @@ export default function QuestDemo({
                   : index === traceProgress && phase === "error"
                     ? "failed"
                     : "queued";
-              return <li className={status} key={step}><i aria-hidden="true" /><span>{step}</span></li>;
+              const label = index === 0 && contextSource === "nexla-cache"
+                ? "Using cached Nexla context."
+                : step;
+              return <li className={status} key={step}><i aria-hidden="true" /><span>{label}</span></li>;
             })}
           </ol>
 
           {error && <p className="error-message" role="alert">{error}</p>}
+          {planner?.status === "fallback" && (
+            <p className="fallback-message" role="status">
+              Zero planning was unavailable — QuestLoop selected a deterministic persona recovery quest.
+            </p>
+          )}
           {asset?.status === "fallback" && (
             <p className="fallback-message" role="status">
               Primary hosting service failed — QuestLoop selected its local recovery page.

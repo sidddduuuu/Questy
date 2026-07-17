@@ -1,0 +1,41 @@
+[
+  {
+    "id": "maya",
+    "name": "Maya",
+    "persona": "social_creator",
+    "visitPattern": "visits with friends on weekends",
+    "sharingStyle": "public",
+    "commonGroup": "friends and followers",
+    "favoriteProduct": "seasonal drinks",
+    "currentXp": 320,
+    "currentTier": "Explorer",
+    "previousQuestResult": "completed",
+    "businessGoal": "Fill quiet Tuesday afternoons with new customers"
+  },
+  {
+    "id": "omar",
+    "name": "Omar",
+    "persona": "office_connector",
+    "visitPattern": "weekday lunch",
+    "sharingStyle": "private",
+    "commonGroup": "coworkers",
+    "favoriteProduct": "lunch combinations",
+    "currentXp": 780,
+    "currentTier": "Connector",
+    "previousQuestResult": "completed",
+    "businessGoal": "Fill quiet Tuesday afternoons with new customers"
+  },
+  {
+    "id": "lena",
+    "name": "Lena",
+    "persona": "community_organizer",
+    "visitPattern": "weekend family visits",
+    "sharingStyle": "group",
+    "commonGroup": "local parents",
+    "favoriteProduct": "family tasting menu",
+    "currentXp": 1420,
+    "currentTier": "Organizer",
+    "previousQuestResult": "completed",
+    "businessGoal": "Fill quiet Tuesday afternoons with new customers"
+  }
+]

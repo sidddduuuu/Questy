@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   try {
-    const context = await getCustomerContext(parsedId.data);
+    const { context, source } = await getCustomerContext(parsedId.data);
     if (!context) {
       return Response.json(
         { success: false, error: "Customer context not found" },
@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
-    return Response.json({ success: true, source: "nexla", context });
+    return Response.json({ success: true, source, context });
   } catch {
     return Response.json(
       { success: false, error: "Nexla customer context is unavailable" },

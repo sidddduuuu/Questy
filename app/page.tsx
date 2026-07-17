@@ -18,9 +18,9 @@ async function loadCustomers() {
 }
 
 export default async function Home() {
-  const customers = await loadCustomers();
+  const result = await loadCustomers();
 
-  if (!customers || customers.length === 0) {
+  if (!result || result.customers.length === 0) {
     return (
       <main className="integration-error">
         <span className="eyebrow">QuestLoop</span>
@@ -31,6 +31,10 @@ export default async function Home() {
   }
 
   return (
-    <QuestDemo customers={customers} personaLabels={personaLabels} />
+    <QuestDemo
+      customers={result.customers}
+      initialContextSource={result.source}
+      personaLabels={personaLabels}
+    />
   );
 }
