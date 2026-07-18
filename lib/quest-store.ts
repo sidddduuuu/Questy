@@ -19,14 +19,14 @@ export function getQuest(questId: string): Quest | undefined {
 
 export function markQuestReady(
   questId: string,
-  asset: ZeroQuestAsset,
+  assets: ZeroQuestAsset[],
 ): Quest | undefined {
   const quest = quests.get(questId);
   if (!quest) return undefined;
 
   const readyQuest: Quest = {
     ...quest,
-    assets: [...quest.assets, asset],
+    assets: [...quest.assets, ...assets],
     status: "ready",
   };
   quests.set(questId, readyQuest);

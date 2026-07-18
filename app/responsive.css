@@ -12,6 +12,7 @@
   .hero-customer { width: min(280px, 100%); }
   .dashboard-grid { grid-template-columns: 1fr; }
   .compare-grid { grid-template-columns: 1fr; }
+  .campaign-kit { grid-template-columns: 1fr; }
   .compare-quest > p,
   .compare-quest .reward-row { min-height: 0; }
   .compare-empty { min-height: 150px; }

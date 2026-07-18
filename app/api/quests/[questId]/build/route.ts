@@ -1,19 +1,8 @@
 import { QuestBuildRequestSchema } from "@/lib/quest";
-import { createLocalQuestAsset } from "@/lib/quest-page";
 import { getQuest, markQuestReady } from "@/lib/quest-store";
-import { publishQuestPage } from "@/lib/zero";
+import { buildQuestCampaign } from "@/lib/zero";
 
 type RouteContext = { params: Promise<{ questId: string }> };
-
-function publicRequestUrl(requestUrl: string): string {
-  const issuer = process.env.POMERIUM_ISSUER;
-  if (!issuer) return requestUrl;
-
-  const origin = issuer.startsWith("http://") || issuer.startsWith("https://")
-    ? issuer
-    : `https://${issuer}`;
-  return new URL(new URL(requestUrl).pathname, origin).toString();
-}
 
 export async function POST(request: Request, { params }: RouteContext) {
   let body: unknown;
@@ -43,17 +32,15 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    const asset = await publishQuestPage(
+    const assets = await buildQuestCampaign(
       QuestBuildRequestSchema.parse(storedQuest),
     );
-    markQuestReady(storedQuest.id, asset);
-    return Response.json({ success: true, asset });
+    markQuestReady(storedQuest.id, assets);
+    return Response.json({ success: true, assets });
   } catch {
-    const asset = createLocalQuestAsset(
-      quest.data.id,
-      publicRequestUrl(request.url),
+    return Response.json(
+      { success: false, error: "Zero campaign creation is unavailable" },
+      { status: 502 },
     );
-    markQuestReady(quest.data.id, asset);
-    return Response.json({ success: true, asset });
   }
 }

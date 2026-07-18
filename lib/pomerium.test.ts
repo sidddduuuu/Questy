@@ -58,6 +58,9 @@ test("awards a stored quest only once", () => {
     title: "Bring coworkers Tuesday",
     description: "Invite two coworkers for lunch this Tuesday.",
     rationale: "Omar connects with coworkers.",
+    socialPost: "Choose Tuesday's lunch special and join the team to try the winner together.",
+    imagePrompt: "A polished square restaurant photograph of three lunch dishes in warm natural light.",
+    dishChoices: ["Chicken bowl", "Vegetable wrap", "Lentil plate"],
     xpReward: 300,
     businessReward: "20% group discount",
     tier: "Connector",
@@ -67,7 +70,11 @@ test("awards a stored quest only once", () => {
     createdAt: "2026-07-17T00:00:00.000Z",
   };
   saveQuest(quest);
-  markQuestReady(quest.id, { assetType: "page", status: "created" });
+  markQuestReady(quest.id, [
+    { assetType: "image", status: "created" },
+    { assetType: "form", status: "created" },
+    { assetType: "page", status: "created" },
+  ]);
 
   assert.equal(Boolean(markQuestCompleted(quest.id, quest.createdAt)), true);
   assert.equal(markQuestCompleted(quest.id, quest.createdAt), undefined);

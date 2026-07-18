@@ -20,8 +20,8 @@ const traceSteps = [
   "Select a quest strategy",
   "Determine required capabilities",
   "Search Zero for a service",
-  "Execute the selected service",
-  "Publish the live quest",
+  "Generate image and live form",
+  "Publish the live campaign",
 ] as const;
 
 type AppState =
@@ -35,6 +35,11 @@ type AppState =
 type Screen = "dashboard" | "compare" | "quest" | "promotion";
 type PersonaLabels = Record<CustomerContext["persona"], string>;
 type ContextSource = "nexla" | "nexla-cache";
+type QuestVerification = {
+  postPublished: boolean;
+  imagePublished: boolean;
+  formShared: boolean;
+};
 type CustomerRun = {
   quest: Quest;
   planner: QuestPlannerExecution;
@@ -148,7 +153,7 @@ function Sidebar({
         <i className="ti ti-player-play-filled" aria-hidden="true" />
         {busy ? "Running live flow…" : "Run full demo"}
       </button>
-      <p className="side-note">Uses Omar’s live record, builds a quest, and publishes it through Zero.</p>
+      <p className="side-note">Uses Maya’s live record and has Zero create her complete social campaign.</p>
     </aside>
   );
 }
@@ -217,8 +222,28 @@ function QuestCard({
   asset: ZeroQuestAsset | null;
   completion: QuestCompletion | null;
   completing: boolean;
-  onComplete: () => void;
+  onComplete: (verification: QuestVerification) => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  const [verification, setVerification] = useState<QuestVerification>({
+    postPublished: false,
+    imagePublished: false,
+    formShared: false,
+  });
+  const image = quest.assets.find(({ assetType }) => assetType === "image");
+  const form = quest.assets.find(({ assetType }) => assetType === "form");
+  const verified = Object.values(verification).every(Boolean);
+
+  function updateVerification(key: keyof QuestVerification, checked: boolean) {
+    setVerification((current) => ({ ...current, [key]: checked }));
+  }
+
+  function copyPost() {
+    void navigator.clipboard.writeText(quest.socialPost)
+      .then(() => setCopied(true))
+      .catch(() => setCopied(false));
+  }
+
   return (
     <article className="quest-card">
       <div className="quest-card-top">
@@ -235,7 +260,37 @@ function QuestCard({
       <div className="capability-list" aria-label="Agent-selected capabilities">
         {quest.requiredCapabilities.map((capability) => <span key={capability}>{capability}</span>)}
       </div>
+      {image?.url && form?.url && (
+        <section className="campaign-kit" aria-label="Zero-created campaign toolkit">
+          <div className="campaign-image">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img alt="AI-generated restaurant campaign" src={image.url} />
+            <a href={image.url} rel="noreferrer" target="_blank">Open image <i className="ti ti-arrow-up-right" aria-hidden="true" /></a>
+          </div>
+          <div className="campaign-copy">
+            <span className="eyebrow">Ready-to-post caption</span>
+            <p>{quest.socialPost}</p>
+            <button className="button secondary-button" onClick={copyPost} type="button">
+              <i className={`ti ${copied ? "ti-check" : "ti-copy"}`} aria-hidden="true" />
+              {copied ? "Copied" : "Copy post"}
+            </button>
+            <div className="form-proof">
+              <strong>Customer form is live</strong>
+              <span>{quest.dishChoices.join(" · ")}</span>
+              <a href={form.url} rel="noreferrer" target="_blank">Open form <i className="ti ti-arrow-up-right" aria-hidden="true" /></a>
+            </div>
+          </div>
+        </section>
+      )}
       <p className="trust-line"><i className="ti ti-shield-lock" aria-hidden="true" /> Completion and XP awards are protected by Pomerium.</p>
+      {asset && !completion && (
+        <fieldset className="verification-list">
+          <legend>Verify campaign completion</legend>
+          <label><input checked={verification.postPublished} onChange={(event) => updateVerification("postPublished", event.target.checked)} type="checkbox" /> Post published</label>
+          <label><input checked={verification.imagePublished} onChange={(event) => updateVerification("imagePublished", event.target.checked)} type="checkbox" /> Image shared</label>
+          <label><input checked={verification.formShared} onChange={(event) => updateVerification("formShared", event.target.checked)} type="checkbox" /> Form link added</label>
+        </fieldset>
+      )}
       <div className="quest-actions">
         {asset?.url && (
           <a className="button secondary-button" href={asset.url} rel="noreferrer" target="_blank">
@@ -243,7 +298,7 @@ function QuestCard({
           </a>
         )}
         {asset && !completion && (
-          <button className="button primary-button" disabled={completing} onClick={onComplete} type="button">
+          <button className="button primary-button" disabled={completing || !verified} onClick={() => onComplete(verification)} type="button">
             <i className={`ti ${completing ? "ti-loader-2" : "ti-rosette-discount-check"}`} aria-hidden="true" />
             {completing ? "Verifying with Pomerium…" : "Complete quest"}
           </button>
@@ -300,7 +355,7 @@ function Dashboard({
   error: string | null;
   durationMs: number | null;
   onCreate: () => void;
-  onComplete: () => void;
+  onComplete: (verification: QuestVerification) => void;
 }) {
   const busy = phase === "quest_planning" || phase === "zero_searching";
   return (
@@ -335,7 +390,7 @@ function Dashboard({
       {error && <p className="message error-message" role="alert"><i className="ti ti-alert-circle" aria-hidden="true" /> {error}</p>}
       {planner?.status === "fallback" && <p className="message recovery-message">Zero planning recovered with a validated local strategy.</p>}
       {asset?.status === "fallback" && <p className="message recovery-message">Zero hosting recovered to the built-in quest page.</p>}
-      {quest && <QuestCard asset={asset} completion={completion} completing={completing} onComplete={onComplete} quest={quest} />}
+      {quest && <QuestCard asset={asset} completion={completion} completing={completing} key={quest.id} onComplete={onComplete} quest={quest} />}
       <IntegrationProof asset={asset} durationMs={durationMs} planner={planner} />
     </div>
   );
@@ -394,19 +449,29 @@ function CompareScreen({
 }
 
 function QuestScreen({ quest, asset, customer }: { quest: Quest | null; asset: ZeroQuestAsset | null; customer: CustomerContext }) {
+  const image = quest?.assets.find(({ assetType }) => assetType === "image");
+  const form = quest?.assets.find(({ assetType }) => assetType === "form");
   return (
     <section className="content-screen quest-page-screen">
       <span className="eyebrow">Published experience</span>
       <h1>{quest ? `${customer.name}’s live quest` : "No quest published yet"}</h1>
       {quest && asset ? (
         <div className="published-card">
-          <div className="published-art" aria-hidden="true"><i className="ti ti-map-pin-star" /></div>
+          <div className="published-art">
+            {image?.url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt="Zero-generated restaurant social campaign" src={image.url} />
+            ) : <i className="ti ti-map-pin-star" aria-hidden="true" />}
+          </div>
           <div>
             <span className="quest-tag">Powered by {asset.provider ?? "Zero"}</span>
             <h2>{quest.title}</h2>
-            <p>{quest.description}</p>
+            <p>{quest.socialPost}</p>
             <div className="reward-row"><span>+{quest.xpReward} XP</span><span>{quest.businessReward}</span></div>
-            {asset.url && <a className="button primary-button" href={asset.url} rel="noreferrer" target="_blank"><i className="ti ti-external-link" aria-hidden="true" /> Open published page</a>}
+            <div className="quest-actions">
+              {asset.url && <a className="button primary-button" href={asset.url} rel="noreferrer" target="_blank"><i className="ti ti-external-link" aria-hidden="true" /> Open campaign</a>}
+              {form?.url && <a className="button secondary-button" href={form.url} rel="noreferrer" target="_blank"><i className="ti ti-forms" aria-hidden="true" /> Open customer form</a>}
+            </div>
           </div>
         </div>
       ) : (
@@ -531,9 +596,11 @@ export default function QuestDemo({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(generated.quest),
       })));
-      const readyQuest: Quest = { ...generated.quest, assets: [...generated.quest.assets, built.asset], status: "ready" };
+      const pageAsset = built.assets.find(({ assetType }) => assetType === "page");
+      if (!pageAsset) throw new Error("Zero did not return a published campaign page");
+      const readyQuest: Quest = { ...generated.quest, assets: built.assets, status: "ready" };
       const elapsed = performance.now() - startedAt;
-      setAsset(built.asset);
+      setAsset(pageAsset);
       setQuest(readyQuest);
       setDurationMs(elapsed);
       setRuns((current) => ({
@@ -541,7 +608,7 @@ export default function QuestDemo({
         [customer.id]: {
           quest: readyQuest,
           planner: generated.planner,
-          asset: built.asset,
+          asset: pageAsset,
           completion: null,
           source: generated.source,
           durationMs: elapsed,
@@ -555,12 +622,16 @@ export default function QuestDemo({
     }
   }
 
-  async function completeQuest() {
+  async function completeQuest(verification: QuestVerification) {
     if (!quest) return;
     setError(null);
     setCompleting(true);
     try {
-      const result = CompleteQuestResponseSchema.parse(await responseJson(await fetch(`/api/quests/${quest.id}/complete`, { method: "POST" })));
+      const result = CompleteQuestResponseSchema.parse(await responseJson(await fetch(`/api/quests/${quest.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(verification),
+      })));
       const completedQuest: Quest = { ...quest, status: "completed", completedAt: new Date().toISOString() };
       setCompletion(result);
       setQuest(completedQuest);
@@ -581,9 +652,9 @@ export default function QuestDemo({
   return (
     <div className="app-shell">
       <TopNav onChange={setScreen} screen={screen} />
-      <Sidebar busy={busy} customers={customers} onRunDemo={() => void createQuest("omar")} onSelect={selectCustomer} personaLabels={personaLabels} selected={selected} />
+      <Sidebar busy={busy} customers={customers} onRunDemo={() => void createQuest("maya")} onSelect={selectCustomer} personaLabels={personaLabels} selected={selected} />
       <main className="main-content">
-        {screen === "dashboard" && <Dashboard asset={asset} completing={completing} completion={completion} customer={selected} durationMs={durationMs} error={error} onComplete={() => void completeQuest()} onCreate={() => void createQuest()} phase={phase} planner={planner} quest={quest} source={contextSource} traceProgress={traceProgress} />}
+        {screen === "dashboard" && <Dashboard asset={asset} completing={completing} completion={completion} customer={selected} durationMs={durationMs} error={error} onComplete={(verification) => void completeQuest(verification)} onCreate={() => void createQuest()} phase={phase} planner={planner} quest={quest} source={contextSource} traceProgress={traceProgress} />}
         {screen === "compare" && <CompareScreen busy={busy} customers={customers} onGenerate={(id) => void createQuest(id)} personaLabels={personaLabels} runs={runs} selected={selected} />}
         {screen === "quest" && <QuestScreen asset={asset} customer={selected} quest={quest} />}
         {screen === "promotion" && <PromotionScreen completion={completion} customer={selected} />}

@@ -14,6 +14,12 @@ export const QuestPlanSchema = z.object({
   title: z.string().min(1).max(80).refine(underWords(10)),
   description: z.string().min(1).max(300).refine(underWords(35)),
   rationale: z.string().min(1).max(400),
+  socialPost: z.string().min(20).max(700),
+  imagePrompt: z.string().min(20).max(700),
+  dishChoices: z
+    .array(z.string().min(1).max(80))
+    .length(3)
+    .refine((choices) => new Set(choices).size === choices.length),
   xpReward: z.number().int().min(100).max(1_000),
   businessReward: z.string().min(1).max(120),
   tier: z.enum(["Explorer", "Connector", "Organizer", "Ambassador"]),
@@ -34,6 +40,12 @@ export const QuestBuildRequestSchema = z.object({
   businessReward: z.string().min(1).max(120),
   tier: z.enum(["Explorer", "Connector", "Organizer", "Ambassador"]),
   requiredCapabilities: z.array(z.string().min(1).max(80)).min(1).max(8),
+  socialPost: z.string().min(20).max(700),
+  imagePrompt: z.string().min(20).max(700),
+  dishChoices: z
+    .array(z.string().min(1).max(80))
+    .length(3)
+    .refine((choices) => new Set(choices).size === choices.length),
 });
 
 export const ZeroQuestAssetSchema = z.object({
@@ -75,7 +87,20 @@ export const GenerateQuestResponseSchema = z.object({
 
 export const BuildQuestResponseSchema = z.object({
   success: z.literal(true),
-  asset: ZeroQuestAssetSchema,
+  assets: z
+    .array(ZeroQuestAssetSchema)
+    .length(3)
+    .refine((assets) =>
+      ["image", "form", "page"].every((type) =>
+        assets.some((asset) => asset.assetType === type && asset.status === "created"),
+      ),
+    ),
+});
+
+export const CompleteQuestRequestSchema = z.object({
+  postPublished: z.literal(true),
+  imagePublished: z.literal(true),
+  formShared: z.literal(true),
 });
 
 export const CompleteQuestResponseSchema = z.object({
@@ -108,6 +133,9 @@ const fallbackPlans = {
     title: "Let friends choose Tuesday's drink",
     description: "Share a three-choice drink poll and bring one voter to try the winning drink this Tuesday.",
     rationale: "Maya already shares publicly with friends and followers.",
+    socialPost: "Help choose Tuesday's featured drink. Vote for your favorite, then meet me at the restaurant Tuesday afternoon to try the winner together.",
+    imagePrompt: "Editorial square social media photograph of three colorful seasonal restaurant drinks on a sunlit table, polished hospitality campaign, no text, no logos",
+    dishChoices: ["Mango iced tea", "Rose lemonade", "Cardamom cold brew"],
     xpReward: 180,
     businessReward: "Free drink for both",
     requiredCapabilities: ["hosted poll page", "social graphic", "trackable link"],
@@ -116,6 +144,9 @@ const fallbackPlans = {
     title: "Bring two coworkers Tuesday",
     description: "Invite two coworkers to a private group lunch between 1:30 PM and 3:00 PM this Tuesday.",
     rationale: "Omar naturally connects with coworkers during weekday lunch.",
+    socialPost: "Coworkers: choose our Tuesday lunch special, then join me for a relaxed group lunch after the rush.",
+    imagePrompt: "Editorial square photograph of three inviting restaurant lunch dishes arranged for coworkers, warm natural light, polished hospitality campaign, no text, no logos",
+    dishChoices: ["Grilled chicken bowl", "Roasted vegetable wrap", "Spiced lentil plate"],
     xpReward: 300,
     businessReward: "20% group discount",
     requiredCapabilities: ["private invitation page", "RSVP form", "QR code"],
@@ -124,6 +155,9 @@ const fallbackPlans = {
     title: "Host a Tuesday tasting",
     description: "Invite three local parents to a four-person tasting during Tuesday afternoon.",
     rationale: "Lena already organizes group experiences for local parents.",
+    socialPost: "Local parents: vote for the tasting dish you want to try, then join our small Tuesday afternoon table for the winning menu.",
+    imagePrompt: "Editorial square photograph of three family-style tasting dishes at a welcoming restaurant table, warm afternoon light, polished hospitality campaign, no text, no logos",
+    dishChoices: ["Family mezze board", "Seasonal tasting plate", "Mini dessert flight"],
     xpReward: 650,
     businessReward: "Host visits free",
     requiredCapabilities: ["event page", "group registration form", "invitation card"],

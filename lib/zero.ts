@@ -16,6 +16,10 @@ const HOST_CAPABILITY_URL = "https://host.withzero.ai/run";
 const SEARCH_QUERY = "publish a small hosted HTML quest page and return a public URL";
 const PLANNER_CAPABILITY_URL = "https://agent402.tools/api/llm";
 const PLANNER_SEARCH_QUERY = "OpenAI GPT chat completion with JSON output";
+const IMAGE_CAPABILITY_URL = "https://x402-gateway-production.up.railway.app/api/image/fast";
+const IMAGE_SEARCH_QUERY = "fast image generation prompt";
+const FORM_CAPABILITY_URL = "https://forms.withzero.xyz/api/v1/forms";
+const FORM_SEARCH_QUERY = "create and host a public form with multiple choice questions";
 
 const ZeroSearchSchema = z.object({
   capabilities: z.array(
@@ -50,6 +54,22 @@ const HostedPageSchema = z.object({
   slug: z.string(),
   expiresAt: z.iso.datetime(),
   size: z.number().nonnegative(),
+});
+
+const GeneratedImageSchema = z.object({
+  model: z.string().min(1),
+  images: z.array(z.object({
+    url: z.url(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  })).min(1),
+  inference_time_ms: z.number().nonnegative(),
+});
+
+const HostedFormSchema = z.object({
+  id: z.string().min(1),
+  url: z.url(),
+  submitUrl: z.url(),
 });
 
 const PlannerResponseSchema = z.object({
@@ -92,7 +112,7 @@ async function runZeroJson<T>(args: string[], schema: z.ZodType<T>): Promise<T> 
     const { stdout } = await execFileAsync(await getZeroCommand(), args, {
       encoding: "utf8",
       maxBuffer: 1_000_000,
-      timeout: 60_000,
+      timeout: 180_000,
     });
     return schema.parse(JSON.parse(stdout));
   } catch (error) {
@@ -216,7 +236,7 @@ function plannerRequest(customer: CustomerContext) {
       {
         role: "system",
         content:
-          "You are the QuestLoop quest planner. Create one safe personalized referral quest that directly helps the business goal, matches the customer's natural sharing behavior, involves at least one new or returning customer, and is completable within seven days. Never expose private data or create spam, coercion, deception, or illegal activity. Keep the title under 10 words and description under 35 words.",
+          "You are the QuestLoop campaign planner. Create one safe personalized restaurant referral quest that directly helps the business goal and matches the customer's natural sharing behavior. Also write a polished ready-to-post social caption with a clear invitation to vote, a detailed square food-photography image prompt with no text or logos, and exactly three distinct menu choices related to the customer's favorite product. Never expose private data or create spam, coercion, deception, or illegal activity. Keep the title under 10 words and description under 35 words.",
       },
       { role: "user", content: `Customer context: ${JSON.stringify(customer)}` },
     ],
@@ -230,11 +250,14 @@ function plannerRequest(customer: CustomerContext) {
         schema: {
           type: "object",
           additionalProperties: false,
-          required: ["title", "description", "rationale", "xpReward", "businessReward", "tier", "requiredCapabilities"],
+          required: ["title", "description", "rationale", "socialPost", "imagePrompt", "dishChoices", "xpReward", "businessReward", "tier", "requiredCapabilities"],
           properties: {
             title: { type: "string" },
             description: { type: "string" },
             rationale: { type: "string" },
+            socialPost: { type: "string" },
+            imagePrompt: { type: "string" },
+            dishChoices: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
             xpReward: { type: "integer", minimum: 100, maximum: 1000 },
             businessReward: { type: "string" },
             tier: { type: "string", enum: ["Explorer", "Connector", "Organizer", "Ambassador"] },
@@ -246,38 +269,144 @@ function plannerRequest(customer: CustomerContext) {
   };
 }
 
-export async function publishQuestPage(
-  quest: QuestBuildRequest,
-): Promise<ZeroQuestAsset> {
-  const maxPay = z.coerce.number().min(0).max(0.05).parse(
-    process.env.ZERO_MAX_PAY ?? "0.01",
-  );
+async function findCapability(query: string, url: string, maxPay: number) {
   const search = await runZeroJson(
-    [
-      "search",
-      SEARCH_QUERY,
-      "--json",
-      "--status",
-      "healthy",
-      "--max-cost",
-      String(maxPay),
-      "--limit",
-      "5",
-    ],
+    ["search", query, "--json", "--status", "healthy", "--max-cost", String(maxPay), "--limit", "8"],
     ZeroSearchSchema,
   );
   const selected = search.capabilities.find(
-    ({ url, availabilityStatus }) =>
-      url === HOST_CAPABILITY_URL && availabilityStatus === "healthy",
+    (capability) => capability.url === url && capability.availabilityStatus === "healthy",
   );
-  if (!selected) throw new Error("No allowlisted Zero hosting capability is healthy");
+  if (!selected) throw new Error(`No allowlisted Zero capability is healthy for ${url}`);
 
   const capability = await runZeroJson(
     ["get", selected.token, "--json"],
     ZeroCapabilitySchema,
   );
+  if (capability.url !== url) throw new Error(`Zero capability changed for ${url}`);
+  return { capability, selected };
+}
+
+async function createCampaignImage(quest: QuestBuildRequest): Promise<ZeroQuestAsset> {
+  const maxPay = z.coerce.number().min(0.015).max(0.05).parse(
+    process.env.ZERO_IMAGE_MAX_PAY ?? "0.02",
+  );
+  const { capability, selected } = await findCapability(
+    IMAGE_SEARCH_QUERY,
+    IMAGE_CAPABILITY_URL,
+    maxPay,
+  );
+  if (!("model" in capability.bodySchema.properties) || !("prompt" in capability.bodySchema.properties)) {
+    throw new Error("Zero image capability schema changed");
+  }
+
+  const result = await runZeroJson(
+    [
+      "fetch", capability.url, "--capability", selected.token,
+      "--max-pay", String(maxPay), "--timeout", "180", "--json",
+      "-d", JSON.stringify({ model: "flux-schnell", prompt: quest.imagePrompt }),
+    ],
+    ZeroFetchSchema,
+  );
+  if (!result.ok) {
+    await reviewRun(result.runId, false, "QuestLoop social campaign image generation failed upstream.");
+    throw new Error(`Zero image generation failed with status ${result.status}`);
+  }
+
+  const generated = GeneratedImageSchema.parse(result.body);
+  const image = generated.images[0];
+  const reviewed = await reviewRun(
+    result.runId,
+    true,
+    "Generated a ready-to-use square restaurant social campaign image for QuestLoop.",
+  );
+  return {
+    assetType: "image",
+    provider: selected.canonicalName,
+    url: image.url,
+    runId: result.runId,
+    cost: Number(selected.cost.amount),
+    status: "created",
+    raw: { capabilityToken: selected.token, model: generated.model, width: image.width, height: image.height, reviewed },
+  };
+}
+
+async function createDishChoiceForm(quest: QuestBuildRequest): Promise<ZeroQuestAsset> {
+  const maxPay = z.coerce.number().min(0).max(0.02).parse(
+    process.env.ZERO_FORM_MAX_PAY ?? "0.01",
+  );
+  const { capability, selected } = await findCapability(
+    FORM_SEARCH_QUERY,
+    FORM_CAPABILITY_URL,
+    maxPay,
+  );
   if (
-    capability.url !== HOST_CAPABILITY_URL ||
+    !capability.bodySchema.required.includes("schema") ||
+    !capability.bodySchema.required.includes("recipients")
+  ) {
+    throw new Error("Zero Forms capability schema changed");
+  }
+
+  const recipient = z.email().parse(
+    process.env.QUESTLOOP_FORM_RECIPIENT ??
+      process.env.POMERIUM_ADMIN_EMAILS?.split(",")[0]?.trim(),
+  );
+  const result = await runZeroJson(
+    [
+      "fetch", capability.url, "--capability", selected.token,
+      "--max-pay", String(maxPay), "--timeout", "120", "--json",
+      "-d", JSON.stringify({
+        title: `${quest.title} · Choose Tuesday's favorite`,
+        schema: {
+          type: "object",
+          required: ["name", "choice"],
+          properties: {
+            name: { type: "string", title: "Your name", minLength: 1 },
+            choice: { type: "string", title: "What should we feature?", enum: quest.dishChoices },
+          },
+        },
+        uiSchema: { choice: { "ui:widget": "radio" } },
+        recipients: [recipient],
+      }),
+    ],
+    ZeroFetchSchema,
+  );
+  if (!result.ok) {
+    await reviewRun(result.runId, false, "QuestLoop restaurant choice form creation failed upstream.");
+    throw new Error(`Zero Forms failed with status ${result.status}`);
+  }
+
+  const form = HostedFormSchema.parse(result.body);
+  const reviewed = await reviewRun(
+    result.runId,
+    true,
+    "Created a public three-choice restaurant campaign form for QuestLoop.",
+  );
+  return {
+    assetType: "form",
+    provider: selected.canonicalName,
+    url: form.url,
+    runId: result.runId,
+    cost: Number(selected.cost.amount),
+    status: "created",
+    raw: { capabilityToken: selected.token, formId: form.id, submitUrl: form.submitUrl, reviewed },
+  };
+}
+
+async function publishQuestPage(
+  quest: QuestBuildRequest,
+  image: ZeroQuestAsset,
+  form: ZeroQuestAsset,
+): Promise<ZeroQuestAsset> {
+  const maxPay = z.coerce.number().min(0).max(0.05).parse(
+    process.env.ZERO_MAX_PAY ?? "0.01",
+  );
+  const { capability, selected } = await findCapability(
+    SEARCH_QUERY,
+    HOST_CAPABILITY_URL,
+    maxPay,
+  );
+  if (
     !capability.bodySchema.required.includes("content") ||
     !("ttlHours" in capability.bodySchema.properties)
   ) {
@@ -298,7 +427,7 @@ export async function publishQuestPage(
       "-d",
       JSON.stringify({
         slug: `questloop-${quest.customerId}-${quest.id}`.slice(0, 64),
-        content: renderQuestPage(quest),
+        content: renderQuestPage(quest, image.url!, form.url!),
         ttlHours: 336,
       }),
     ],
@@ -335,4 +464,15 @@ export async function publishQuestPage(
       reviewed,
     },
   };
+}
+
+export async function buildQuestCampaign(
+  quest: QuestBuildRequest,
+): Promise<ZeroQuestAsset[]> {
+  const [image, form] = await Promise.all([
+    createCampaignImage(quest),
+    createDishChoiceForm(quest),
+  ]);
+  const page = await publishQuestPage(quest, image, form);
+  return [image, form, page];
 }

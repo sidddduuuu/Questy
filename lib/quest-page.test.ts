@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createLocalQuestAsset, renderQuestPage } from "./quest-page.ts";
+import { renderQuestPage } from "./quest-page.ts";
 import {
+  BuildQuestResponseSchema,
+  CompleteQuestRequestSchema,
   fallbackQuestPlan,
   QuestBuildRequestSchema,
   QuestPlanSchema,
@@ -17,6 +19,9 @@ const quest: QuestBuildRequest = {
   businessReward: "20% group discount",
   tier: "Connector",
   requiredCapabilities: ["private invitation page", "RSVP form"],
+  socialPost: "Choose Tuesday's lunch special and join us to try the winner together.",
+  imagePrompt: "A polished square restaurant photograph of three lunch dishes in warm natural light.",
+  dishChoices: ["Chicken bowl", "Vegetable wrap", "Lentil plate"],
 };
 
 test("validates a bounded quest build request", () => {
@@ -28,7 +33,11 @@ test("validates a bounded quest build request", () => {
 });
 
 test("escapes quest content before publishing HTML", () => {
-  const html = renderQuestPage({ ...quest, title: "<script>alert(1)</script>" });
+  const html = renderQuestPage(
+    { ...quest, title: "<script>alert(1)</script>" },
+    "https://images.example/campaign.jpg",
+    "https://forms.example/choice",
+  );
 
   assert.equal(html.includes("<script>alert(1)</script>"), false);
   assert.equal(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true);
@@ -50,14 +59,18 @@ test("rejects quest plans that exceed prompt word limits", () => {
   );
 });
 
-test("creates a usable local asset when Zero hosting fails", () => {
-  const asset = createLocalQuestAsset(
-    quest.id,
-    `https://questloop.test/api/quests/${quest.id}/build`,
-  );
+test("requires a complete created campaign bundle", () => {
+  const image = { assetType: "image", status: "created" } as const;
+  const form = { assetType: "form", status: "created" } as const;
+  const page = { assetType: "page", status: "created" } as const;
 
-  assert.equal(asset.status, "fallback");
-  assert.equal(asset.url, `https://questloop.test/quest/${quest.id}`);
+  assert.equal(BuildQuestResponseSchema.safeParse({ success: true, assets: [image, form, page] }).success, true);
+  assert.equal(BuildQuestResponseSchema.safeParse({ success: true, assets: [image, page] }).success, false);
+});
+
+test("requires all campaign verification confirmations", () => {
+  assert.equal(CompleteQuestRequestSchema.safeParse({ postPublished: true, imagePublished: true, formShared: true }).success, true);
+  assert.equal(CompleteQuestRequestSchema.safeParse({ postPublished: true, imagePublished: false, formShared: true }).success, false);
 });
 
 test("recovers with a persona-specific quest plan", () => {

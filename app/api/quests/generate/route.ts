@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  fallbackQuestPlan,
   GenerateQuestRequestSchema,
   QuestSchema,
 } from "@/lib/quest";
@@ -9,28 +8,13 @@ import type { CustomerContext } from "@/lib/customer";
 import { getCustomerContext } from "@/lib/nexla";
 import { planQuest, type QuestPlanResult } from "@/lib/zero";
 
-async function planQuestWithRecovery(
+async function planQuestWithRetry(
   customer: CustomerContext,
 ): Promise<QuestPlanResult> {
   try {
     return await planQuest(customer);
   } catch {
-    try {
-      return await planQuest(customer);
-    } catch {
-      return {
-        plan: fallbackQuestPlan(customer),
-        execution: {
-          status: "fallback",
-          provider: "QuestLoop deterministic recovery",
-          model: "persona rules",
-          runId: `fallback-${customer.id}`,
-          cost: 0,
-          reviewed: false,
-          capabilityToken: "local-recovery",
-        },
-      };
-    }
+    return planQuest(customer);
   }
 }
 
@@ -68,7 +52,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { plan, execution } = await planQuestWithRecovery(context);
+    const { plan, execution } = await planQuestWithRetry(context);
     const quest = saveQuest(
       QuestSchema.parse({
         id: `quest-${context.id}-${randomUUID().slice(0, 8)}`,

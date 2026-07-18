@@ -1,6 +1,11 @@
 import { getCustomerContext } from "@/lib/nexla";
 import { canCompleteQuest, verifyPomeriumIdentity } from "@/lib/pomerium";
-import { QuestIdSchema, tierForXp, type Quest } from "@/lib/quest";
+import {
+  CompleteQuestRequestSchema,
+  QuestIdSchema,
+  tierForXp,
+  type Quest,
+} from "@/lib/quest";
 import { getQuest, markQuestCompleted } from "@/lib/quest-store";
 
 type RouteContext = { params: Promise<{ questId: string }> };
@@ -37,6 +42,16 @@ async function awardQuest(quest: Quest, subject: string) {
 export async function POST(request: Request, { params }: RouteContext) {
   const questId = QuestIdSchema.safeParse((await params).questId);
   if (!questId.success) return errorResponse("Invalid quest", 400);
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse("Quest verification must be valid JSON", 400);
+  }
+  if (!CompleteQuestRequestSchema.safeParse(body).success) {
+    return errorResponse("Confirm the post, image, and form before completing", 400);
+  }
 
   let identity;
   try {
