@@ -37,7 +37,8 @@ export async function POST(request: Request, { params }: RouteContext) {
     );
     markQuestReady(storedQuest.id, assets);
     return Response.json({ success: true, assets });
-  } catch {
+  } catch (error) {
+    console.error("Quest campaign build failed", error);
     return Response.json(
       { success: false, error: "Zero campaign creation is unavailable" },
       { status: 502 },

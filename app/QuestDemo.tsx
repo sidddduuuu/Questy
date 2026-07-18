@@ -151,9 +151,9 @@ function Sidebar({
       </div>
       <button className="run-demo" disabled={busy} onClick={onRunDemo} type="button">
         <i className="ti ti-player-play-filled" aria-hidden="true" />
-        {busy ? "Running live flow…" : "Run full demo"}
+        {busy ? "Running live flow…" : `Run ${selected.name}’s flow`}
       </button>
-      <p className="side-note">Uses Maya’s live record and has Zero create her complete social campaign.</p>
+      <p className="side-note">Uses {selected.name}’s live record and has Zero create the complete campaign.</p>
     </aside>
   );
 }
@@ -224,7 +224,7 @@ function QuestCard({
   completing: boolean;
   onComplete: (verification: QuestVerification) => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [verification, setVerification] = useState<QuestVerification>({
     postPublished: false,
     imagePublished: false,
@@ -232,16 +232,23 @@ function QuestCard({
   });
   const image = quest.assets.find(({ assetType }) => assetType === "image");
   const form = quest.assets.find(({ assetType }) => assetType === "form");
+  const isOmar = quest.customerId === "omar";
   const verified = Object.values(verification).every(Boolean);
+  const shareFooter = form?.url
+    ? isOmar
+      ? `Tuesday · 1:30–3:00 PM · ${quest.businessReward}\nRSVP: ${form.url}`
+      : `Vote here: ${form.url}`
+    : "";
+  const shareText = shareFooter ? `${quest.socialPost}\n\n${shareFooter}` : quest.socialPost;
 
   function updateVerification(key: keyof QuestVerification, checked: boolean) {
     setVerification((current) => ({ ...current, [key]: checked }));
   }
 
   function copyPost() {
-    void navigator.clipboard.writeText(quest.socialPost)
-      .then(() => setCopied(true))
-      .catch(() => setCopied(false));
+    void navigator.clipboard.writeText(shareText)
+      .then(() => setCopyStatus("copied"))
+      .catch(() => setCopyStatus("failed"));
   }
 
   return (
@@ -260,24 +267,34 @@ function QuestCard({
       <div className="capability-list" aria-label="Agent-selected capabilities">
         {quest.requiredCapabilities.map((capability) => <span key={capability}>{capability}</span>)}
       </div>
+      {isOmar && image?.url && form?.url && asset?.url && (
+        <ul className="output-strip" aria-label="Zero-created Omar deliverables">
+          <li><i className="ti ti-check" aria-hidden="true" /> Invite copy ready</li>
+          <li><i className="ti ti-check" aria-hidden="true" /> Lunch image ready</li>
+          <li><i className="ti ti-check" aria-hidden="true" /> RSVP form live</li>
+          <li><i className="ti ti-check" aria-hidden="true" /> Invitation page live</li>
+        </ul>
+      )}
       {image?.url && form?.url && (
-        <section className="campaign-kit" aria-label="Zero-created campaign toolkit">
+        <section className="campaign-kit" aria-label={isOmar ? "Zero-created coworker lunch toolkit" : "Zero-created campaign toolkit"}>
           <div className="campaign-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img alt="AI-generated restaurant campaign" src={image.url} />
-            <a href={image.url} rel="noreferrer" target="_blank">Open image <i className="ti ti-arrow-up-right" aria-hidden="true" /></a>
+            <img alt={isOmar ? "AI-generated coworker lunch invitation" : "AI-generated restaurant campaign"} src={image.url} />
+            <a href={image.url} rel="noreferrer" target="_blank">{isOmar ? "Open lunch image" : "Open image"} <i className="ti ti-arrow-up-right" aria-hidden="true" /></a>
           </div>
           <div className="campaign-copy">
-            <span className="eyebrow">Ready-to-post caption</span>
+            <span className="eyebrow">{isOmar ? "Ready-to-send coworker invite" : "Ready-to-post caption"}</span>
+            {isOmar && <small className="channel-note">Formatted for Slack, WhatsApp, or email</small>}
             <p>{quest.socialPost}</p>
+            {shareFooter && <p className="share-footer">{shareFooter}</p>}
             <button className="button secondary-button" onClick={copyPost} type="button">
-              <i className={`ti ${copied ? "ti-check" : "ti-copy"}`} aria-hidden="true" />
-              {copied ? "Copied" : "Copy post"}
+              <i className={`ti ${copyStatus === "copied" ? "ti-check" : "ti-copy"}`} aria-hidden="true" />
+              {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Copy failed" : isOmar ? "Copy invitation" : "Copy post"}
             </button>
             <div className="form-proof">
-              <strong>Customer form is live</strong>
-              <span>{quest.dishChoices.join(" · ")}</span>
-              <a href={form.url} rel="noreferrer" target="_blank">Open form <i className="ti ti-arrow-up-right" aria-hidden="true" /></a>
+              <strong>{isOmar ? "Coworker RSVP is live" : "Customer form is live"}</strong>
+              <span>{isOmar ? `1:30–3:00 PM · ${quest.dishChoices.join(" · ")} · dietary needs` : quest.dishChoices.join(" · ")}</span>
+              <a href={form.url} rel="noreferrer" target="_blank">{isOmar ? "Open RSVP form" : "Open form"} <i className="ti ti-arrow-up-right" aria-hidden="true" /></a>
             </div>
           </div>
         </section>
@@ -286,15 +303,15 @@ function QuestCard({
       {asset && !completion && (
         <fieldset className="verification-list">
           <legend>Verify campaign completion</legend>
-          <label><input checked={verification.postPublished} onChange={(event) => updateVerification("postPublished", event.target.checked)} type="checkbox" /> Post published</label>
-          <label><input checked={verification.imagePublished} onChange={(event) => updateVerification("imagePublished", event.target.checked)} type="checkbox" /> Image shared</label>
-          <label><input checked={verification.formShared} onChange={(event) => updateVerification("formShared", event.target.checked)} type="checkbox" /> Form link added</label>
+          <label><input checked={verification.postPublished} onChange={(event) => updateVerification("postPublished", event.target.checked)} type="checkbox" /> {isOmar ? "Invitation sent" : "Post published"}</label>
+          <label><input checked={verification.imagePublished} onChange={(event) => updateVerification("imagePublished", event.target.checked)} type="checkbox" /> {isOmar ? "Lunch image shared" : "Image shared"}</label>
+          <label><input checked={verification.formShared} onChange={(event) => updateVerification("formShared", event.target.checked)} type="checkbox" /> {isOmar ? "RSVP link sent" : "Form link added"}</label>
         </fieldset>
       )}
       <div className="quest-actions">
         {asset?.url && (
           <a className="button secondary-button" href={asset.url} rel="noreferrer" target="_blank">
-            <i className="ti ti-external-link" aria-hidden="true" /> Open live quest
+            <i className="ti ti-external-link" aria-hidden="true" /> {isOmar ? "Open hosted invitation" : "Open live quest"}
           </a>
         )}
         {asset && !completion && (
@@ -451,26 +468,27 @@ function CompareScreen({
 function QuestScreen({ quest, asset, customer }: { quest: Quest | null; asset: ZeroQuestAsset | null; customer: CustomerContext }) {
   const image = quest?.assets.find(({ assetType }) => assetType === "image");
   const form = quest?.assets.find(({ assetType }) => assetType === "form");
+  const isOmar = customer.id === "omar";
   return (
     <section className="content-screen quest-page-screen">
       <span className="eyebrow">Published experience</span>
-      <h1>{quest ? `${customer.name}’s live quest` : "No quest published yet"}</h1>
+      <h1>{quest ? `${customer.name}’s ${isOmar ? "coworker invitation" : "live quest"}` : "No quest published yet"}</h1>
       {quest && asset ? (
         <div className="published-card">
           <div className="published-art">
             {image?.url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img alt="Zero-generated restaurant social campaign" src={image.url} />
+              <img alt={isOmar ? "Zero-generated coworker lunch invitation" : "Zero-generated restaurant social campaign"} src={image.url} />
             ) : <i className="ti ti-map-pin-star" aria-hidden="true" />}
           </div>
           <div>
-            <span className="quest-tag">Powered by {asset.provider ?? "Zero"}</span>
+            <span className="quest-tag">{isOmar ? "Private invitation" : "Published campaign"} · Powered by {asset.provider ?? "Zero"}</span>
             <h2>{quest.title}</h2>
             <p>{quest.socialPost}</p>
             <div className="reward-row"><span>+{quest.xpReward} XP</span><span>{quest.businessReward}</span></div>
             <div className="quest-actions">
-              {asset.url && <a className="button primary-button" href={asset.url} rel="noreferrer" target="_blank"><i className="ti ti-external-link" aria-hidden="true" /> Open campaign</a>}
-              {form?.url && <a className="button secondary-button" href={form.url} rel="noreferrer" target="_blank"><i className="ti ti-forms" aria-hidden="true" /> Open customer form</a>}
+              {asset.url && <a className="button primary-button" href={asset.url} rel="noreferrer" target="_blank"><i className="ti ti-external-link" aria-hidden="true" /> {isOmar ? "Open hosted invitation" : "Open campaign"}</a>}
+              {form?.url && <a className="button secondary-button" href={form.url} rel="noreferrer" target="_blank"><i className="ti ti-forms" aria-hidden="true" /> {isOmar ? "Open RSVP form" : "Open customer form"}</a>}
             </div>
           </div>
         </div>
@@ -652,7 +670,7 @@ export default function QuestDemo({
   return (
     <div className="app-shell">
       <TopNav onChange={setScreen} screen={screen} />
-      <Sidebar busy={busy} customers={customers} onRunDemo={() => void createQuest("maya")} onSelect={selectCustomer} personaLabels={personaLabels} selected={selected} />
+      <Sidebar busy={busy} customers={customers} onRunDemo={() => void createQuest(selected.id)} onSelect={selectCustomer} personaLabels={personaLabels} selected={selected} />
       <main className="main-content">
         {screen === "dashboard" && <Dashboard asset={asset} completing={completing} completion={completion} customer={selected} durationMs={durationMs} error={error} onComplete={(verification) => void completeQuest(verification)} onCreate={() => void createQuest()} phase={phase} planner={planner} quest={quest} source={contextSource} traceProgress={traceProgress} />}
         {screen === "compare" && <CompareScreen busy={busy} customers={customers} onGenerate={(id) => void createQuest(id)} personaLabels={personaLabels} runs={runs} selected={selected} />}

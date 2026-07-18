@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
+import { buildQuestFormRequest } from "@/lib/quest-form";
 import { renderQuestPage } from "@/lib/quest-page";
 import { QuestPlanSchema } from "@/lib/quest";
 import type { CustomerContext } from "@/lib/customer";
@@ -24,6 +25,7 @@ const FORM_SEARCH_QUERY = "create and host a public form with multiple choice qu
 const ZeroSearchSchema = z.object({
   capabilities: z.array(
     z.object({
+      id: z.string().min(1),
       token: z.string().min(1),
       canonicalName: z.string().min(1),
       url: z.url(),
@@ -120,7 +122,7 @@ async function runZeroJson<T>(args: string[], schema: z.ZodType<T>): Promise<T> 
     if (output.success && output.data.stdout) {
       return schema.parse(JSON.parse(output.data.stdout));
     }
-    throw new Error(`Zero ${args[0]} command failed`);
+    throw new Error(`Zero ${args[0]} command failed`, { cause: error });
   }
 }
 
@@ -171,7 +173,7 @@ export async function planQuest(
   if (!selected) throw new Error("No allowlisted Zero planning capability is healthy");
 
   const capability = await runZeroJson(
-    ["get", selected.token, "--json"],
+    ["get", selected.id, "--json"],
     ZeroCapabilitySchema,
   );
   if (
@@ -236,7 +238,7 @@ function plannerRequest(customer: CustomerContext) {
       {
         role: "system",
         content:
-          "You are the QuestLoop campaign planner. Create one safe personalized restaurant referral quest that directly helps the business goal and matches the customer's natural sharing behavior. Also write a polished ready-to-post social caption with a clear invitation to vote, a detailed square food-photography image prompt with no text or logos, and exactly three distinct menu choices related to the customer's favorite product. Never expose private data or create spam, coercion, deception, or illegal activity. Keep the title under 10 words and description under 35 words.",
+          "You are the QuestLoop campaign planner. Create one safe personalized restaurant referral quest that directly helps the business goal and matches the customer's natural sharing behavior. Write ready-to-share copy for the correct channel: a public caption for public sharing, a private coworker invitation for private sharing, or a group invitation for group sharing. Include a clear response call to action, a detailed square food-photography image prompt with no text or logos, and exactly three distinct menu choices related to the customer's favorite product. Never expose private data or create spam, coercion, deception, or illegal activity. Keep the title under 10 words and description under 35 words.",
       },
       { role: "user", content: `Customer context: ${JSON.stringify(customer)}` },
     ],
@@ -280,7 +282,7 @@ async function findCapability(query: string, url: string, maxPay: number) {
   if (!selected) throw new Error(`No allowlisted Zero capability is healthy for ${url}`);
 
   const capability = await runZeroJson(
-    ["get", selected.token, "--json"],
+    ["get", selected.id, "--json"],
     ZeroCapabilitySchema,
   );
   if (capability.url !== url) throw new Error(`Zero capability changed for ${url}`);
@@ -355,19 +357,7 @@ async function createDishChoiceForm(quest: QuestBuildRequest): Promise<ZeroQuest
     [
       "fetch", capability.url, "--capability", selected.token,
       "--max-pay", String(maxPay), "--timeout", "120", "--json",
-      "-d", JSON.stringify({
-        title: `${quest.title} · Choose Tuesday's favorite`,
-        schema: {
-          type: "object",
-          required: ["name", "choice"],
-          properties: {
-            name: { type: "string", title: "Your name", minLength: 1 },
-            choice: { type: "string", title: "What should we feature?", enum: quest.dishChoices },
-          },
-        },
-        uiSchema: { choice: { "ui:widget": "radio" } },
-        recipients: [recipient],
-      }),
+      "-d", JSON.stringify(buildQuestFormRequest(quest, recipient)),
     ],
     ZeroFetchSchema,
   );
@@ -380,7 +370,9 @@ async function createDishChoiceForm(quest: QuestBuildRequest): Promise<ZeroQuest
   const reviewed = await reviewRun(
     result.runId,
     true,
-    "Created a public three-choice restaurant campaign form for QuestLoop.",
+    quest.customerId === "omar"
+      ? "Created a live coworker lunch RSVP form with time, meal, and dietary fields for QuestLoop."
+      : "Created a public three-choice restaurant campaign form for QuestLoop.",
   );
   return {
     assetType: "form",

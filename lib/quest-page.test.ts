@@ -41,6 +41,11 @@ test("escapes quest content before publishing HTML", () => {
 
   assert.equal(html.includes("<script>alert(1)</script>"), false);
   assert.equal(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true);
+  assert.equal(html.includes("Ready-to-send coworker invite"), true);
+  assert.equal(html.includes("Tuesday lunch RSVP"), true);
+  assert.equal(html.includes("preferred time"), true);
+  assert.equal(html.includes("dietary needs"), true);
+  assert.equal(html.includes("Open RSVP form"), true);
 });
 
 test("rejects quest plans that exceed prompt word limits", () => {
@@ -88,5 +93,10 @@ test("recovers with a persona-specific quest plan", () => {
   });
 
   assert.equal(plan.title, "Bring two coworkers Tuesday");
-  assert.equal(plan.requiredCapabilities.includes("private invitation page"), true);
+  assert.deepEqual(plan.requiredCapabilities, [
+    "private invite copy",
+    "professional lunch image",
+    "coworker RSVP form",
+    "hosted invitation page",
+  ]);
 });

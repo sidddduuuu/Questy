@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     return errorResponse("Quest verification must be valid JSON", 400);
   }
   if (!CompleteQuestRequestSchema.safeParse(body).success) {
-    return errorResponse("Confirm the post, image, and form before completing", 400);
+    return errorResponse("Confirm the campaign copy, image, and form before completing", 400);
   }
 
   let identity;
